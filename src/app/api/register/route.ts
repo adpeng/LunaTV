@@ -80,9 +80,11 @@ export async function POST(req: NextRequest) {
     const { username, password, confirmPassword } = await req.json();
 
     // 先检查配置中是否允许注册（在验证输入之前）
+    let autoApprove = true; // 默认自动审核
     try {
       const config = await getConfig();
       const allowRegister = config.UserConfig?.AllowRegister !== false; // 默认允许注册
+      autoApprove = config.UserConfig?.AutoApproveUsers !== false; // 默认自动审核
       
       if (!allowRegister) {
         return NextResponse.json(
@@ -137,10 +139,14 @@ export async function POST(req: NextRequest) {
 
       // 重新获取配置来添加用户
       const config = await getConfig();
+      const now = Date.now();
       const newUser = {
         username: username,
         role: 'user' as const,
-        createdAt: Date.now(), // 设置注册时间戳
+        createdAt: now, // 设置注册时间戳
+        approved: autoApprove, // 根据配置设置审核状态
+        approvedAt: autoApprove ? now : undefined, // 自动审核时设置审核时间
+        approvedBy: autoApprove ? 'system' : undefined, // 自动审核时标记为系统审核
       };
 
       config.UserConfig.Users.push(newUser);
@@ -151,10 +157,13 @@ export async function POST(req: NextRequest) {
       // 清除缓存，确保下次获取配置时是最新的
       clearConfigCache();
 
-      // 注册成功后自动登录
+      // 根据审核模式返回不同的响应
+      if (autoApprove) {
+        // 自动审核：注册成功后自动登录
       const response = NextResponse.json({ 
         ok: true, 
-        message: '注册成功，已自动登录' 
+       message: '注册成功，已自动登录',
+       autoApproved: true
       });
       
       const cookieValue = await generateAuthCookie(
@@ -175,6 +184,15 @@ export async function POST(req: NextRequest) {
       });
 
       return response;
+     } else {
+        // 手动审核：注册成功但需要等待审核
+        return NextResponse.json({ 
+          ok: true, 
+          message: '注册成功，请等待管理员审核',
+          autoApproved: false,
+          pendingApproval: true
+        });
+      }
     } catch (err) {
       console.error('注册用户失败', err);
       return NextResponse.json({ error: '注册失败，请稍后重试' }, { status: 500 });
