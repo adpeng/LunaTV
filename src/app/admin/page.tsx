@@ -52,12 +52,12 @@ import AIRecommendConfig from '@/components/AIRecommendConfig';
 import CacheManager from '@/components/CacheManager';
 import DataMigration from '@/components/DataMigration';
 import ImportExportModal from '@/components/ImportExportModal';
+import PageLayout from '@/components/PageLayout';
 import SourceTestModule from '@/components/SourceTestModule';
 import { TelegramAuthConfig } from '@/components/TelegramAuthConfig';
 import TVBoxSecurityConfig from '@/components/TVBoxSecurityConfig';
 import { TVBoxTokenCell, TVBoxTokenModal } from '@/components/TVBoxTokenManager';
 import YouTubeConfig from '@/components/YouTubeConfig';
-import PageLayout from '@/components/PageLayout';
 
 // 统一按钮样式系统
 const buttonStyles = {
@@ -425,7 +425,8 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
     tvboxEnabledSources?: string[];
   } | null>(null);
   const [selectedTVBoxSources, setSelectedTVBoxSources] = useState<string[]>([]);
-
+  // 🔍 用户搜索状态
+  const [userSearchQuery, setUserSearchQuery] = useState('');
   // 当前登录用户名
   const currentUsername = getAuthInfoFromBrowserCookie()?.username || null;
 
@@ -1346,6 +1347,42 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
             用户列表
           </h4>
           <div className='flex items-center space-x-2'>
+            {/* 搜索框 */}
+            <div className='relative'>
+              <input
+                type='text'
+                placeholder='搜索用户名...'
+                value={userSearchQuery}
+                onChange={(e) => setUserSearchQuery(e.target.value)}
+                className='px-3 py-1.5 pl-8 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent w-48'
+              />
+              <svg
+                className='absolute left-2.5 top-2 w-4 h-4 text-gray-400'
+                fill='none'
+                stroke='currentColor'
+                viewBox='0 0 24 24'
+              >
+                <path
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  strokeWidth={2}
+                  d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'
+                />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* 搜索结果提示 */}
+        {userSearchQuery && (
+          <div className='mb-3 text-sm text-gray-600 dark:text-gray-400'>
+            搜索结果：{config.UserConfig.Users.filter(u => u.username.toLowerCase().includes(userSearchQuery.toLowerCase())).length} 个用户
+          </div>
+        )}
+
+        <div className='flex items-center justify-between mb-3'>
+          <div></div>
+          <div className='flex items-center space-x-2'>
             {/* 批量操作按钮 */}
             {selectedUsers.size > 0 && (
               <>
@@ -1554,7 +1591,15 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
             </thead>
             {/* 按规则排序用户：自己 -> 站长(若非自己) -> 管理员 -> 其他 */}
             {(() => {
-              const sortedUsers = [...config.UserConfig.Users].sort((a, b) => {
+              // 先过滤搜索结果
+              const filteredUsers = userSearchQuery
+                ? config.UserConfig.Users.filter(u => 
+                    u.username.toLowerCase().includes(userSearchQuery.toLowerCase())
+                  )
+                : config.UserConfig.Users;
+
+              // 再排序
+              const sortedUsers = [...filteredUsers].sort((a, b) => {
                 type UserInfo = (typeof config.UserConfig.Users)[number];
                 const priority = (u: UserInfo) => {
                   if (u.username === currentUsername) return 0;
@@ -1725,6 +1770,43 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
                           )}
                           {canOperate && (
                             <>
+                              {/* 审核状态操作按钮 */}
+                              {user.approved !== false && user.role !== 'owner' && (
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm(`确定要将用户 ${user.username} 设置为待审核状态吗？该用户将无法登录，直到重新审核通过。`)) {
+                                      return;
+                                    }
+                                    
+                                    await withLoading(`unapproveUser_${user.username}`, async () => {
+                                      try {
+                                        const res = await fetch('/api/admin/user', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({
+                                            targetUsername: user.username,
+                                            action: 'unapproveUser',
+                                          }),
+                                        });
+
+                                        if (!res.ok) {
+                                          const data = await res.json().catch(() => ({}));
+                                          throw new Error(data.error || `操作失败: ${res.status}`);
+                                        }
+
+                                        await refreshConfig();
+                                        showSuccess(`已将用户 ${user.username} 设置为待审核`, showAlert);
+                                      } catch (err) {
+                                        showError(err instanceof Error ? err.message : '操作失败', showAlert);
+                                      }
+                                    });
+                                  }}
+                                  disabled={isLoading(`unapproveUser_${user.username}`)}
+                                  className={`${buttonStyles.roundedWarning} ${isLoading(`unapproveUser_${user.username}`) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                  {isLoading(`unapproveUser_${user.username}`) ? '处理中...' : '设为待审核'}
+                                </button>
+                              )}
                               {/* 其他操作按钮 */}
                               {user.role === 'user' && (
                                 <button
