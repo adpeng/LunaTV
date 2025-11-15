@@ -887,8 +887,73 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
               </div>
             </div>
 
+                {/* 自动审核用户设置 */}
+            <div className='mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700'>
+              <div className='flex items-center justify-between'>
+                <div>
+                  <div className='font-medium text-gray-900 dark:text-gray-100'>
+                    自动审核用户
+                  </div>
+                  <div className='text-sm text-gray-600 dark:text-gray-400'>
+                    开启后新用户注册即可登录，关闭后需要管理员手动审核
+                  </div>
+                </div>
+                <div className='flex items-center'>
+                  <button
+                    type="button"
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+                      config.UserConfig.AutoApproveUsers !== false ? buttonStyles.toggleOn : buttonStyles.toggleOff
+                    }`}
+                    role="switch"
+                    aria-checked={config.UserConfig.AutoApproveUsers !== false}
+                    onClick={async () => {
+                      await withLoading('toggleAutoApprove', async () => {
+                        try {
+                          const response = await fetch('/api/admin/config', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              ...config,
+                              UserConfig: {
+                                ...config.UserConfig,
+                                AutoApproveUsers: config.UserConfig.AutoApproveUsers === false ? true : false
+                              }
+                            })
+                          });
+                          
+                          if (response.ok) {
+                            await refreshConfig();
+                            showAlert({
+                              type: 'success',
+                              title: '设置已更新',
+                              message: config.UserConfig.AutoApproveUsers === false ? '已启用自动审核' : '已启用手动审核',
+                              timer: 2000
+                            });
+                          } else {
+                            throw new Error('更新配置失败');
+                          }
+                        } catch (err) {
+                          showError(err instanceof Error ? err.message : '操作失败', showAlert);
+                        }
+                      });
+                    }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none inline-block h-5 w-5 rounded-full ${buttonStyles.toggleThumb} shadow transform ring-0 transition duration-200 ease-in-out ${
+                        config.UserConfig.AutoApproveUsers !== false ? buttonStyles.toggleThumbOn : buttonStyles.toggleThumbOff
+                      }`}
+                    />
+                  </button>
+                  <span className='ml-3 text-sm font-medium text-gray-900 dark:text-gray-100'>
+                    {config.UserConfig.AutoApproveUsers !== false ? '自动审核' : '手动审核'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {/* 自动清理非活跃用户设置 */}
-            <div className='p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700'>
+            <div className='mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700'>
               <div className='flex items-center justify-between mb-4'>
                 <div>
                   <div className='font-medium text-gray-900 dark:text-gray-100'>
@@ -1017,10 +1082,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
       )}
 
       {/* 用户统计 */}
-      <div>
-        <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300 mb-3'>
-          用户统计
-        </h4>
+      <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
         <div className='p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800'>
           <div className='text-2xl font-bold text-green-800 dark:text-green-300'>
             {config.UserConfig.Users.length}
@@ -1029,8 +1091,161 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
             总用户数
           </div>
         </div>
+        <div className='p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800'>
+          <div className='text-2xl font-bold text-blue-800 dark:text-blue-300'>
+            {config.UserConfig.Users.filter(u => u.approved !== false).length}
+          </div>
+          <div className='text-sm text-blue-600 dark:text-blue-400'>
+            已审核用户
+          </div>
+        </div>
+        <div className='p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800'>
+          <div className='text-2xl font-bold text-yellow-800 dark:text-yellow-300'>
+            {config.UserConfig.Users.filter(u => u.approved === false).length}
+          </div>
+          <div className='text-sm text-yellow-600 dark:text-yellow-400'>
+            待审核用户
+          </div>
+        </div>
       </div>
+   {/* 待审核用户列表 */}
+      {config.UserConfig.Users.filter(u => u.approved === false).length > 0 && (
+        <div>
+          <div className='flex items-center justify-between mb-3'>
+            <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+              待审核用户
+            </h4>
+            <button
+              onClick={async () => {
+                const pendingUsers = config.UserConfig.Users.filter(u => u.approved === false);
+                if (pendingUsers.length === 0) return;
+                
+                await withLoading('batchApproveAll', async () => {
+                  try {
+                    const res = await fetch('/api/admin/user', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        action: 'batchApproveUsers',
+                        usernames: pendingUsers.map(u => u.username),
+                      }),
+                    });
 
+                    if (!res.ok) {
+                      const data = await res.json().catch(() => ({}));
+                      throw new Error(data.error || `操作失败: ${res.status}`);
+                    }
+
+                    await refreshConfig();
+                    showSuccess(`已批量审核通过 ${pendingUsers.length} 个用户`, showAlert);
+                  } catch (err) {
+                    showError(err instanceof Error ? err.message : '操作失败', showAlert);
+                  }
+                });
+              }}
+              disabled={isLoading('batchApproveAll')}
+              className={isLoading('batchApproveAll') ? buttonStyles.disabled : buttonStyles.success}
+            >
+              {isLoading('batchApproveAll') ? '审核中...' : '全部通过'}
+            </button>
+          </div>
+          <div className='border border-yellow-200 dark:border-yellow-800 rounded-lg max-h-[20rem] overflow-y-auto overflow-x-auto relative bg-yellow-50/50 dark:bg-yellow-900/10'>
+            <table className='min-w-full divide-y divide-yellow-200 dark:divide-yellow-800'>
+              <thead className='bg-yellow-100 dark:bg-yellow-900/30 sticky top-0 z-10'>
+                <tr>
+                  <th className='px-6 py-3 text-left text-xs font-medium text-yellow-800 dark:text-yellow-300 uppercase tracking-wider'>
+                    用户名
+                  </th>
+                  <th className='px-6 py-3 text-left text-xs font-medium text-yellow-800 dark:text-yellow-300 uppercase tracking-wider'>
+                    注册时间
+                  </th>
+                  <th className='px-6 py-3 text-right text-xs font-medium text-yellow-800 dark:text-yellow-300 uppercase tracking-wider'>
+                    操作
+                  </th>
+                </tr>
+              </thead>
+              <tbody className='divide-y divide-yellow-200 dark:divide-yellow-800'>
+                {config.UserConfig.Users.filter(u => u.approved === false).map((user) => (
+                  <tr key={user.username} className='hover:bg-yellow-100 dark:hover:bg-yellow-900/20 transition-colors'>
+                    <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100'>
+                      {user.username}
+                    </td>
+                    <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400'>
+                      {user.createdAt ? new Date(user.createdAt).toLocaleString('zh-CN') : '未知'}
+                    </td>
+                    <td className='px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2'>
+                      <button
+                        onClick={async () => {
+                          await withLoading(`approveUser_${user.username}`, async () => {
+                            try {
+                              const res = await fetch('/api/admin/user', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  targetUsername: user.username,
+                                  action: 'approveUser',
+                                }),
+                              });
+
+                              if (!res.ok) {
+                                const data = await res.json().catch(() => ({}));
+                                throw new Error(data.error || `操作失败: ${res.status}`);
+                              }
+
+                              await refreshConfig();
+                              showSuccess(`已审核通过用户 ${user.username}`, showAlert);
+                            } catch (err) {
+                              showError(err instanceof Error ? err.message : '操作失败', showAlert);
+                            }
+                          });
+                        }}
+                        disabled={isLoading(`approveUser_${user.username}`)}
+                        className={isLoading(`approveUser_${user.username}`) ? buttonStyles.disabled : buttonStyles.roundedSuccess}
+                      >
+                        {isLoading(`approveUser_${user.username}`) ? '审核中...' : '通过'}
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`确定要拒绝用户 ${user.username} 的注册申请吗？拒绝后该用户数据将被删除。`)) {
+                            return;
+                          }
+                          
+                          await withLoading(`rejectUser_${user.username}`, async () => {
+                            try {
+                              const res = await fetch('/api/admin/user', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  targetUsername: user.username,
+                                  action: 'rejectUser',
+                                }),
+                              });
+
+                              if (!res.ok) {
+                                const data = await res.json().catch(() => ({}));
+                                throw new Error(data.error || `操作失败: ${res.status}`);
+                              }
+
+                              await refreshConfig();
+                              showSuccess(`已拒绝用户 ${user.username} 的注册申请`, showAlert);
+                            } catch (err) {
+                              showError(err instanceof Error ? err.message : '操作失败', showAlert);
+                            }
+                          });
+                        }}
+                        disabled={isLoading(`rejectUser_${user.username}`)}
+                        className={isLoading(`rejectUser_${user.username}`) ? buttonStyles.disabled : buttonStyles.roundedDanger}
+                      >
+                        {isLoading(`rejectUser_${user.username}`) ? '拒绝中...' : '拒绝'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
 
       {/* 用户组管理 */}
@@ -1412,6 +1627,7 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
                           </span>
                         </td>
                         <td className='px-6 py-4 whitespace-nowrap'>
+                          <div className='flex flex-col gap-1'>
                           <span
                             className={`px-2 py-1 text-xs rounded-full ${!user.banned
                               ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300'
@@ -1420,6 +1636,12 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
                           >
                             {!user.banned ? '正常' : '已封禁'}
                           </span>
+                            {user.approved === false && (
+                              <span className='px-2 py-1 text-xs rounded-full bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300'>
+                                待审核
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className='px-6 py-4 whitespace-nowrap'>
                           <div className='flex items-center space-x-2'>
