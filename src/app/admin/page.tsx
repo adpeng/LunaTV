@@ -1172,7 +1172,17 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
                       {user.username}
                     </td>
                     <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400'>
-                      {user.createdAt ? new Date(user.createdAt).toLocaleString('zh-CN') : '未知'}
+                      {user.createdAt && typeof user.createdAt === 'number' && !isNaN(user.createdAt) 
+                        ? new Date(user.createdAt).toLocaleString('zh-CN', { 
+                            year: 'numeric', 
+                            month: '2-digit', 
+                            day: '2-digit', 
+                            hour: '2-digit', 
+                            minute: '2-digit', 
+                            second: '2-digit',
+                            hour12: false 
+                          }) 
+                        : '未知'}
                     </td>
                     <td className='px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2'>
                       <button
