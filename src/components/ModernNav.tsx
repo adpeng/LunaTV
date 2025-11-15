@@ -183,17 +183,6 @@ export default function ModernNav() {
                     {item.label}
                   </span>
 
-                  {/* Bottom active border */}
-                  {active && (
-                    <div
-                      className={`absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r ${item.gradient} rounded-full`}
-                    />
-                  )}
-                </Link>
-              );
-            })}
-            </div>
-
             {/* Right Side Actions */}
             <div className='flex items-center gap-3 flex-shrink-0'>
               <ThemeToggle />
