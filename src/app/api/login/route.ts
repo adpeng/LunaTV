@@ -165,10 +165,14 @@ export async function POST(req: NextRequest) {
 
     const config = await getConfig();
     const user = config.UserConfig.Users.find((u) => u.username === username);
+    // 检查用户状态
     if (user && user.banned) {
       return NextResponse.json({ error: '用户被封禁' }, { status: 401 });
     }
-
+    // 检查审核状态（approved 为 undefined 视为已审核，兼容旧数据）
+    if (user && user.approved === false) {
+      return NextResponse.json({ error: '账户待审核，请等待管理员审核后再登录' }, { status: 403 });
+    }
     // 校验用户密码
     try {
       const pass = await db.verifyUser(username, password);
