@@ -165,15 +165,7 @@ export async function POST(req: NextRequest) {
 
     const config = await getConfig();
     const user = config.UserConfig.Users.find((u) => u.username === username);
-    // 检查用户状态
-    if (user && user.banned) {
-      return NextResponse.json({ error: '用户被封禁' }, { status: 401 });
-    }
-    // 检查审核状态（approved 为 undefined 视为已审核，兼容旧数据）
-    if (user && user.approved === false) {
-      return NextResponse.json({ error: '账户待审核，请等待管理员审核后再登录' }, { status: 403 });
-    }
-    // 校验用户密码
+    // 先校验用户密码（这样可以区分用户不存在和密码错误）
     try {
       const pass = await db.verifyUser(username, password);
       if (!pass) {
@@ -182,7 +174,24 @@ export async function POST(req: NextRequest) {
           { status: 401 }
         );
       }
+      } catch (err) {
+      console.error('数据库验证失败', err);
+      return NextResponse.json({ error: '数据库错误' }, { status: 500 });
+    }
 
+    // 密码验证通过后，再检查用户状态
+    // 检查用户是否被封禁
+    if (user && user.banned) {
+      return NextResponse.json({ error: '该账户已被封禁，无法登录' }, { status: 403 });
+    }
+    
+    // 检查审核状态（approved 为 undefined 视为已审核，兼容旧数据）
+    if (user && user.approved === false) {
+      return NextResponse.json({ error: '账户待审核，请等待管理员审核后再登录' }, { status: 403 });
+    }
+
+    // 所有检查通过，设置认证cookie
+    try {
       // 验证成功，设置认证cookie
       const response = NextResponse.json({ ok: true });
       const cookieValue = await generateAuthCookie(
@@ -204,8 +213,8 @@ export async function POST(req: NextRequest) {
 
       return response;
     } catch (err) {
-      console.error('数据库验证失败', err);
-      return NextResponse.json({ error: '数据库错误' }, { status: 500 });
+      console.error('设置认证 Cookie 失败', err);
+      return NextResponse.json({ error: '登录失败' }, { status: 500 });
     }
   } catch (error) {
     console.error('登录接口异常', error);
