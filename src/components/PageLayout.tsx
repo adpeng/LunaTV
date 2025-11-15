@@ -6,6 +6,7 @@ import Sidebar from './Sidebar';
 import { useSite } from './SiteProvider';
 import { ThemeToggle } from './ThemeToggle';
 import { UserMenu } from './UserMenu';
+import UserStatusChecker from './UserStatusChecker';
 
 interface PageLayoutProps {
   children: React.ReactNode;
@@ -20,6 +21,9 @@ const PageLayout = ({ children, activePath = '/', useModernNav = true }: PageLay
     // 2025 Modern Navigation Layout
     return (
       <div className='w-full min-h-screen'>
+          {/* 用户状态检查器 */}
+        <UserStatusChecker />
+        
         {/* Modern Navigation - Top (Desktop) & Bottom (Mobile) */}
         <ModernNav />
 
@@ -52,6 +56,9 @@ const PageLayout = ({ children, activePath = '/', useModernNav = true }: PageLay
   // Legacy Sidebar Layout (原来的设计)
   return (
     <div className='w-full min-h-screen'>
+       {/* 用户状态检查器 */}
+      <UserStatusChecker />
+      
       {/* 移动端头部 */}
       <MobileHeader showBackButton={['/play', '/live'].includes(activePath)} />
 
