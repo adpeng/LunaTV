@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
+import { validateUserStatus } from '@/lib/user-validation';
 
 // 计算注册天数
 function calculateRegistrationDays(startDate: number): number {
@@ -27,6 +28,12 @@ export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
+      // 验证用户状态（是否被禁用或待审核）
+    const statusError = await validateUserStatus(request);
+    if (statusError) {
+      return statusError;
+    }
+
     // 从 cookie 获取用户信息
     const authInfo = getAuthInfoFromCookie(request);
     if (!authInfo || !authInfo.username) {
@@ -127,7 +134,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     console.log('POST /api/user/my-stats - 开始处理请求');
-
+  // 验证用户状态（是否被禁用或待审核）
+    const statusError = await validateUserStatus(request);
+    if (statusError) {
+      return statusError;
+    }
     // 从 cookie 获取用户信息
     const authInfo = getAuthInfoFromCookie(request);
     if (!authInfo || !authInfo.username) {
