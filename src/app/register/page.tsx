@@ -163,15 +163,24 @@ function RegisterPageClient() {
       });
 
       if (res.ok) {
-        await res.json(); // 读取响应但不使用
-        // 显示成功消息，稍等一下再跳转
+        const data = await res.json();
         setError(null);
+        if (data.pendingApproval) {
+          // 需要等待审核
+          setSuccess('注册成功！请等待管理员审核后再登录');
+          // 3秒后跳转到登录页
+          setTimeout(() => {
+            router.replace('/login');
+          }, 3000);
+        } else {
+          // 自动审核通过，直接登录
         setSuccess('注册成功！正在跳转...');
         // 给用户一个成功提示，然后再跳转
         setTimeout(() => {
           const redirect = searchParams.get('redirect') || '/';
           router.replace(redirect);
         }, 1500); // 1.5秒后跳转，让用户看到成功消息
+       }
       } else {
         const data = await res.json();
         setError(data.error ?? '注册失败');
