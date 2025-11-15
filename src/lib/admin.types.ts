@@ -24,12 +24,16 @@ export interface AdminConfig {
   };
   UserConfig: {
     AllowRegister?: boolean; // 是否允许用户注册，默认 true
+    AutoApproveUsers?: boolean; // 是否自动审核用户，默认 true（自动审核），false 为手动审核
     AutoCleanupInactiveUsers?: boolean; // 是否自动清理非活跃用户，默认 false
     InactiveUserDays?: number; // 非活跃用户保留天数，默认 7
     Users: {
       username: string;
       role: 'user' | 'admin' | 'owner';
       banned?: boolean;
+      approved?: boolean; // 用户审核状态，true=已审核通过，false=待审核，undefined=旧数据（视为已审核）
+      approvedAt?: number; // 审核通过时间戳
+      approvedBy?: string; // 审核人（管理员用户名）
       enabledApis?: string[]; // 优先级高于tags限制（网站内搜索用）
       tags?: string[]; // 多 tags 取并集限制
       createdAt?: number; // 用户注册时间戳
