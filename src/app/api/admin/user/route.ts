@@ -21,6 +21,9 @@ const ACTIONS = [
   'userGroup',
   'updateUserGroups',
   'batchUpdateUserGroups',
+  'approveUser',
+  'rejectUser',
+  'batchApproveUsers',
 ] as const;
 
 export async function POST(request: NextRequest) {
@@ -58,7 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 用户组操作和批量操作不需要targetUsername
-    if (!targetUsername && !['userGroup', 'batchUpdateUserGroups'].includes(action)) {
+    if (!targetUsername && !['userGroup', 'batchUpdateUserGroups', 'batchApproveUsers'].includes(action)) {
       return NextResponse.json({ error: '缺少目标用户名' }, { status: 400 });
     }
 
@@ -69,6 +72,7 @@ export async function POST(request: NextRequest) {
       action !== 'userGroup' &&
       action !== 'updateUserGroups' &&
       action !== 'batchUpdateUserGroups' &&
+      action !== 'batchApproveUsers' &&
       username === targetUsername
     ) {
       return NextResponse.json(
@@ -98,7 +102,7 @@ export async function POST(request: NextRequest) {
     let targetEntry: any = null;
     let isTargetAdmin = false;
 
-    if (!['userGroup', 'batchUpdateUserGroups'].includes(action) && targetUsername) {
+    if (!['userGroup', 'batchUpdateUserGroups', 'batchApproveUsers'].includes(action) && targetUsername) {
       targetEntry = adminConfig.UserConfig.Users.find(
         (u) => u.username === targetUsername
       );
@@ -464,7 +468,60 @@ export async function POST(request: NextRequest) {
             }
           }
         }
+          break;
+      }
+      case 'approveUser': {
+        if (!targetEntry) {
+          return NextResponse.json({ error: '目标用户不存在' }, { status: 404 });
+        }
 
+        // 检查是否已经审核通过
+        if (targetEntry.approved === true) {
+          return NextResponse.json({ error: '用户已审核通过' }, { status: 400 });
+        }
+
+        // 审核通过
+        targetEntry.approved = true;
+        targetEntry.approvedAt = Date.now();
+        targetEntry.approvedBy = username;
+
+        break;
+      }
+      case 'rejectUser': {
+        if (!targetEntry) {
+          return NextResponse.json({ error: '目标用户不存在' }, { status: 404 });
+        }
+
+        // 拒绝审核，删除用户
+        await db.deleteUser(targetUsername!);
+
+        // 从配置中移除用户
+        const userIndex = adminConfig.UserConfig.Users.findIndex(
+          (u) => u.username === targetUsername
+        );
+        if (userIndex > -1) {
+          adminConfig.UserConfig.Users.splice(userIndex, 1);
+        }
+
+        break;
+      }
+      case 'batchApproveUsers': {
+        const { usernames } = body as { usernames: string[] };
+
+        if (!usernames || !Array.isArray(usernames) || usernames.length === 0) {
+          return NextResponse.json({ error: '缺少用户名列表' }, { status: 400 });
+        }
+
+        // 批量审核通过
+        const now = Date.now();
+        for (const targetUsername of usernames) {
+          const targetUser = adminConfig.UserConfig.Users.find(u => u.username === targetUsername);
+          if (targetUser && targetUser.approved !== true) {
+            targetUser.approved = true;
+            targetUser.approvedAt = now;
+            targetUser.approvedBy = username;
+          }
+        }
         break;
       }
       default:
