@@ -24,6 +24,7 @@ const ACTIONS = [
   'approveUser',
   'rejectUser',
   'batchApproveUsers',
+  'unapproveUser', // 新增：将已审核用户设置为待审核
 ] as const;
 
 export async function POST(request: NextRequest) {
@@ -522,6 +523,24 @@ export async function POST(request: NextRequest) {
             targetUser.approvedBy = username;
           }
         }
+        break;
+      }
+      case 'unapproveUser': {
+        if (!targetEntry) {
+          return NextResponse.json({ error: '目标用户不存在' }, { status: 404 });
+        }
+
+        // 检查是否已经是待审核状态
+        if (targetEntry.approved === false) {
+          return NextResponse.json({ error: '用户已是待审核状态' }, { status: 400 });
+        }
+
+        // 设置为待审核
+        targetEntry.approved = false;
+        // 清除审核信息
+        delete targetEntry.approvedAt;
+        delete targetEntry.approvedBy;
+        
         break;
       }
       default:
